@@ -15,6 +15,7 @@ import miasm.arch.x86.regs as regs_module
 from miasm.arch.x86.regs import *
 from miasm.core.asm_ast import AstNode, AstInt, AstId, AstMem, AstOp
 from miasm.ir.ir import color_expr_html
+from miasm.core.utils import BRACKET_O, BRACKET_C
 
 
 log = logging.getLogger("x86_arch")
@@ -624,7 +625,7 @@ class instruction_x86(instruction):
                 s = str(expr).replace('(', '').replace(')', '')
             else:
                 s = str(expr)
-            o = prefix + sz + ' PTR %s[%s]' % (segm, s)
+            o = prefix + sz + ' PTR ' + str(segm) + '[%s]' % s
         elif isinstance(expr, ExprOp) and expr.op == 'segm':
             o = "%s:%s" % (expr.args[0], expr.args[1])
         else:
@@ -655,7 +656,7 @@ class instruction_x86(instruction):
                 s = color_expr_html(expr, loc_db)#.replace('(', '').replace(')', '')
             else:
                 s = color_expr_html(expr, loc_db)
-            o = prefix + sz + ' PTR %s[%s]' % (segm, s)
+            o = prefix + sz + ' PTR ' + str(segm) + BRACKET_O + str(s) + BRACKET_C
         elif isinstance(expr, ExprOp) and expr.op == 'segm':
             o = "%s:%s" % (
                 color_expr_html(expr.args[0], loc_db),
@@ -2458,6 +2459,10 @@ class x86_rm_xmm(x86_rm_mm):
     is_mm = False
     is_xmm = True
 
+class x86_rm_xmm_m16(x86_rm_mm):
+    msize = 16
+    is_mm = False
+    is_xmm = True
 
 class x86_rm_xmm_m32(x86_rm_mm):
     msize = 32
@@ -3352,6 +3357,7 @@ rm_arg_mm_m64 = bs(l=0, cls=(x86_rm_mm_m64,), fname='rmarg')
 rm_arg_mm_reg = bs(l=0, cls=(x86_rm_mm_reg,), fname='rmarg')
 
 rm_arg_xmm = bs(l=0, cls=(x86_rm_xmm,), fname='rmarg')
+rm_arg_xmm_m16 = bs(l=0, cls=(x86_rm_xmm_m16,), fname='rmarg')
 rm_arg_xmm_m32 = bs(l=0, cls=(x86_rm_xmm_m32,), fname='rmarg')
 rm_arg_xmm_m64 = bs(l=0, cls=(x86_rm_xmm_m64,), fname='rmarg')
 rm_arg_xmm_m128 = bs(l=0, cls=(x86_rm_xmm_m128,), fname='rmarg')
@@ -4284,7 +4290,8 @@ addop("pshuflw", [bs8(0x0f), bs8(0x70), pref_f2] +
       rmmod(xmm_reg, rm_arg_xmm_m128) + [u08])
 addop("pshufhw", [bs8(0x0f), bs8(0x70), pref_f3] +
       rmmod(xmm_reg, rm_arg_xmm_m128) + [u08])
-
+addop("ptest", [bs8(0x0f), bs8(0x38), bs8(0x17), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm_m128))
 
 ### Convert
 ### SS = single precision
@@ -4339,10 +4346,34 @@ addop("cvttsd2si",[bs8(0x0f), bs8(0x2c), pref_f2]
 addop("cvttss2si",[bs8(0x0f), bs8(0x2c), pref_f3]
       + rmmod(reg, rm_arg_xmm_m32))
 
+addop("blendps", [bs8(0x0f), bs8(0x3a), bs8(0x0c), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm_m128) + [u08],
+      [xmm_reg, rm_arg_xmm_m128, u08])
+
+addop("pblendw", [bs8(0x0f), bs8(0x3a), bs8(0x0e), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm_m128) + [u08])
+
 addop("palignr", [bs8(0x0f), bs8(0x73), bs8(0x0f), no_xmm_pref] +
       rmmod(mm_reg, rm_arg_mm_m64) + [u08], [mm_reg, rm_arg_mm_m64, u08])
 addop("palignr", [bs8(0x0f), bs8(0x3a), bs8(0x0f), pref_66] +
       rmmod(xmm_reg, rm_arg_xmm_m128) + [u08], [xmm_reg, rm_arg_xmm_m128, u08])
+
+addop("pclmulqdq", [bs8(0x0f), bs8(0x3a), bs8(0x44), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm_m128) + [u08],
+      [xmm_reg, rm_arg_xmm_m128, u08])
+
+addop("psignb", [bs8(0x0f), bs8(0x38), bs8(0x08), no_xmm_pref] +
+      rmmod(mm_reg, rm_arg_mm_m64))
+addop("psignb", [bs8(0x0f), bs8(0x38), bs8(0x08), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm_m128))
+addop("psignw", [bs8(0x0f), bs8(0x38), bs8(0x09), no_xmm_pref] +
+      rmmod(mm_reg, rm_arg_mm_m64))
+addop("psignw", [bs8(0x0f), bs8(0x38), bs8(0x09), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm_m128))
+addop("psignd", [bs8(0x0f), bs8(0x38), bs8(0x0a), no_xmm_pref] +
+      rmmod(mm_reg, rm_arg_mm_m64))
+addop("psignd", [bs8(0x0f), bs8(0x38), bs8(0x0a), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm_m128))
 
 addop("psrlq", [bs8(0x0f), bs8(0x73), no_xmm_pref] +
       rmmod(d2, rm_arg_mm) + [u08], [rm_arg_mm, u08])
@@ -4446,6 +4477,12 @@ addop("pmaxuw", [bs8(0x0f), bs8(0x38), bs8(0x3e), pref_66] +
 addop("pmaxud", [bs8(0x0f), bs8(0x38), bs8(0x3f), pref_66] +
       rmmod(xmm_reg, rm_arg_xmm))
 
+addop("pmaxsb", [bs8(0x0f), bs8(0x38), bs8(0x3c), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm))
+
+addop("pmaxsd", [bs8(0x0f), bs8(0x38), bs8(0x3d), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm))
+
 addop("pmaxsw", [bs8(0x0f), bs8(0xee), no_xmm_pref] +
       rmmod(mm_reg, rm_arg_mm_m64))
 addop("pmaxsw", [bs8(0x0f), bs8(0xee), pref_66] +
@@ -4459,9 +4496,17 @@ addop("pminub", [bs8(0x0f), bs8(0xda), pref_66] +
 addop("pminuw", [bs8(0x0f), bs8(0x38), bs8(0x3a), pref_66] +
       rmmod(xmm_reg, rm_arg_xmm))
 
+addop("phminposuw", [bs8(0x0f), bs8(0x38), bs8(0x41), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm_m128))
+
 addop("pminud", [bs8(0x0f), bs8(0x38), bs8(0x3b), pref_66] +
       rmmod(xmm_reg, rm_arg_xmm))
 
+addop("pminsb", [bs8(0x0f), bs8(0x38), bs8(0x38), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm))
+
+addop("pminsd", [bs8(0x0f), bs8(0x38), bs8(0x39), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm))
 
 addop("pcmpeqb", [bs8(0x0f), bs8(0x74), no_xmm_pref] +
       rmmod(mm_reg, rm_arg_mm))
@@ -4565,9 +4610,8 @@ addop("pextrb", [bs8(0x0f), bs8(0x3a), bs8(0x14), pref_66] +
       rmmod(xmm_reg, rm_arg_reg_m08) + [u08], [rm_arg_reg_m08, xmm_reg, u08])
 addop("pextrd", [bs8(0x0f), bs8(0x3a), bs8(0x16), pref_66, bs_opmode32] +
       rmmod(xmm_reg, rm_arg) + [u08], [rm_arg, xmm_reg, u08])
-addop("pextrq", [bs8(0x0f), bs8(0x3a), bs8(0x16), pref_66] +
-      rmmod(xmm_reg, rm_arg_m64) + [bs_opmode64] + [u08], [rm_arg_m64, xmm_reg, u08])
-
+addop("pextrq", [bs8(0x0F), bs8(0x3A), bs8(0x16), pref_66, bs_opmode64] +
+      rmmod(xmm_reg, rm_arg) + [u08], [rm_arg, xmm_reg, u08])
 
 addop("pextrw", [bs8(0x0f), bs8(0x3a), bs8(0x15), pref_66] +
       rmmod(xmm_reg, rm_arg_reg_m16) + [u08], [rm_arg_reg_m16, xmm_reg, u08])
@@ -4590,6 +4634,24 @@ addop("pmovmskb", [bs8(0x0f), bs8(0xd7), no_xmm_pref] +
       rmmod(reg_modrm, rm_arg_mm_reg))
 addop("pmovmskb", [bs8(0x0f), bs8(0xd7), pref_66] +
       rmmod(reg_modrm, rm_arg_xmm_reg))
+
+addop("pmovsxwd", [bs8(0x0f), bs8(0x38), bs8(0x23), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm_m64))
+
+addop("pmovsxwq", [bs8(0x0f), bs8(0x38), bs8(0x24), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm_m32))
+
+addop("pmovsxbw", [bs8(0x0f), bs8(0x38), bs8(0x20), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm_m64))
+
+addop("pmovsxbd", [bs8(0x0f), bs8(0x38), bs8(0x21), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm_m32))
+
+addop("pmovsxbq", [bs8(0x0f), bs8(0x38), bs8(0x22), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm_m16))
+
+addop("pmovsxdq", [bs8(0x0f), bs8(0x38), bs8(0x25), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm_m64))
 
 addop("shufps", [bs8(0x0f), bs8(0xc6), no_xmm_pref] +
       rmmod(xmm_reg, rm_arg_xmm) + [u08])
@@ -4616,6 +4678,11 @@ addop("packuswb", [bs8(0x0f), bs8(0x67), no_xmm_pref] +
 addop("packuswb", [bs8(0x0f), bs8(0x67), pref_66] +
       rmmod(xmm_reg, rm_arg_xmm_m128))
 
+addop("packusdw", [bs8(0x0f), bs8(0x38), bs8(0x2b), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm_m128))
+
+addop("pmulld", [bs8(0x0f), bs8(0x38), bs8(0x40), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm))
 addop("pmullw", [bs8(0x0f), bs8(0xd5), no_xmm_pref] +
       rmmod(mm_reg, rm_arg_mm_m64))
 addop("pmullw", [bs8(0x0f), bs8(0xd5), pref_66] +
@@ -4627,6 +4694,8 @@ addop("pmulhuw", [bs8(0x0f), bs8(0xe4), pref_66] +
 addop("pmulhw", [bs8(0x0f), bs8(0xe5), no_xmm_pref] +
       rmmod(mm_reg, rm_arg_mm_m64))
 addop("pmulhw", [bs8(0x0f), bs8(0xe5), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm_m128))
+addop("pmuldq", [bs8(0x0f), bs8(0x38), bs8(0x28), pref_66] +
       rmmod(xmm_reg, rm_arg_xmm_m128))
 addop("pmuludq", [bs8(0x0f), bs8(0xf4), no_xmm_pref] +
       rmmod(mm_reg, rm_arg_mm_m64))
@@ -4687,6 +4756,9 @@ addop("pavgw", [bs8(0x0f), bs8(0xe3), no_xmm_pref] +
       rmmod(mm_reg, rm_arg_mm_m64))
 addop("pavgw", [bs8(0x0f), bs8(0xe3), pref_66] +
       rmmod(xmm_reg, rm_arg_xmm_m128))
+
+addop("mpsadbw", [bs8(0x0f), bs8(0x3a), bs8(0x42), pref_66] +
+      rmmod(xmm_reg, rm_arg_xmm_m128) + [u08])
 
 addop("maskmovq", [bs8(0x0f), bs8(0xf7), no_xmm_pref] +
       rmmod(mm_reg, rm_arg_mm_reg))
